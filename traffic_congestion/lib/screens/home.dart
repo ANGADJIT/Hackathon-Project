@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:traffic_congestion/model/incidents_model.dart';
+import 'package:traffic_congestion/screens/details.dart';
 import 'package:traffic_congestion/utils/api_key.dart';
 import 'package:velocity_x/velocity_x.dart';
 
@@ -107,6 +108,7 @@ class _HomeState extends State<Home> {
                 );
 
                 await IncidentsApi.changeData(
+                    context: context,
                     longitude: positions.longitude,
                     latitude: positions.latitude,
                     nELa: bounds.northeast.latitude,
@@ -129,22 +131,57 @@ class _HomeState extends State<Home> {
                     _googleMapController!
                         .setMapStyle(_style), //* change map style
                   }),
+
+          Align(
+            alignment: Alignment.topLeft,
+            child: StreamBuilder<int>(
+                initialData: 0,
+                stream: IncidentsApi.event,
+                builder: (context, snapshot) {
+                  return VxBox(
+                          child: 'Incidents ${snapshot.data!}'
+                              .text
+                              .italic
+                              .light
+                              .hexColor(Vx.whiteHex)
+                              .size(context.screenWidth * .02)
+                              .makeCentered())
+                      .rounded
+                      .hexColor('#204f5a')
+                      .shadowMax
+                      .border(color: Vx.hexToColor(Vx.grayHex300), width: .4)
+                      .size(
+                          context.screenWidth * .42, context.screenHeight * .09)
+                      .make()
+                      .pSymmetric(h: 20.0, v: 25.0)
+                      .onTap(() {
+                    if (snapshot.data! != 0) {
+                      context
+                          .nextPage(Details(details: IncidentsApi.incidents));
+                    } else {
+                      VxToast.show(context,
+                          msg: 'No Incindents', bgColor: Vx.red300);
+                    }
+                  });
+                }),
+          ),
+
           //* data presenter widget
           Align(
             alignment: Alignment.bottomRight,
             child: VxBox(
                     child: StreamBuilder<List>(
-                        initialData: [],
+                        initialData: const [],
                         stream: IncidentsApi.data,
                         builder: (context, AsyncSnapshot<List> snapshot) {
                           int length = snapshot.data!.length;
                           String congestion = '';
                           Color? color;
 
-                          if (length < 5) {
+                          if (length <= 100) {
                             congestion = 'Low';
                             color = Vx.hexToColor('#1e8a30');
-                          } else if (length > 5 && length <= 10) {
+                          } else if (length > 101 && length <= 200) {
                             congestion = 'Medium';
                             color = Vx.hexToColor('#915f0d');
                           } else {
@@ -162,7 +199,8 @@ class _HomeState extends State<Home> {
                                   .pSymmetric(h: 15.0, v: 12.0),
                               const Spacer(),
                               congestion.text.italic
-                                  .size(context.screenWidth * .043)
+                              .overflow(TextOverflow.ellipsis)
+                                  .size(context.screenWidth * .038)
                                   .color(color)
                                   .makeCentered()
                                   .pSymmetric(h: 15.0, v: 12.0),
