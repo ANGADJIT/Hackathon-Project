@@ -42,14 +42,15 @@ dependencies:
 
   #* maps packages for integration of google maps
   google_maps_flutter: ^2.0.11
-  geolocator: ^7.7.1
-  
-
+    
   #* package for connectivity check
   connectivity: ^3.0.6
 
   #* http package for api's
   http:
+
+  #* package for state management
+  stream_variable: 
 
 dev_dependencies:
   flutter_test:

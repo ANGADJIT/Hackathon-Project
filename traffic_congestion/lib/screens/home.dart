@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
+import 'dart:io';
+import 'dart:ui';
 import 'package:http/http.dart' as http;
 import 'package:connectivity/connectivity.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:traffic_congestion/model/incidents_model.dart';
 import 'package:traffic_congestion/utils/api_key.dart';
 import 'package:velocity_x/velocity_x.dart';
 
@@ -20,6 +23,11 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> {
   //* style json string
   late String _style;
+
+  double roundDouble(double value, int places) {
+    double mod = pow(10.0, places).toDouble();
+    return ((value * mod).round().toDouble() / mod);
+  }
 
   //* method to check wether is there connection or not
   void _checkConnectivity() async {
@@ -51,6 +59,9 @@ class _HomeState extends State<Home> {
 
   @override
   void initState() {
+    //* initialize Api stream
+    IncidentsApi.init();
+
     //* every 2 seconds we will check for connectivity
     Timer.periodic(5.seconds, (timer) => _checkConnectivity());
     //* init map style
@@ -81,15 +92,29 @@ class _HomeState extends State<Home> {
         child: Stack(children: [
           GoogleMap(
               onCameraIdle: () async {
-                final callback = context.showLoading(msg: '');
+                final callback = context.showLoading(
+                    msg: '', bgColor: Vx.hexToColor('#204f5a'));
 
                 final bounds = await _googleMapController!.getVisibleRegion();
-                final result = await http.get(Uri.parse(
-                    'http://www.mapquestapi.com/traffic/v2/incidents?key=$apiKey&boundingBox=${bounds.northeast.latitude},${bounds.northeast.longitude},${bounds.southwest.latitude},${bounds.southwest.longitude}&filters=construction,incidents,congestion,event'));
-                
-                print(jsonDecode(result.body));
 
-                Future.delayed(1.milliseconds, callback.call());
+                final positions = await _googleMapController!.getLatLng(
+                    ScreenCoordinate(
+                        x: (context.screenWidth ~/ 2),
+                        y: (context.screenHeight ~/ 2)));
+
+                Future.delayed(
+                  2.seconds,
+                );
+
+                await IncidentsApi.changeData(
+                    longitude: positions.longitude,
+                    latitude: positions.latitude,
+                    nELa: bounds.northeast.latitude,
+                    nELo: bounds.northeast.longitude,
+                    sELa: bounds.southwest.latitude,
+                    sELo: bounds.southwest.longitude);
+
+                Future.delayed(1.microseconds, callback.call());
               },
               trafficEnabled: true,
               mapType: MapType.normal,
@@ -104,6 +129,94 @@ class _HomeState extends State<Home> {
                     _googleMapController!
                         .setMapStyle(_style), //* change map style
                   }),
+          //* data presenter widget
+          Align(
+            alignment: Alignment.bottomRight,
+            child: VxBox(
+                    child: StreamBuilder<List>(
+                        initialData: [],
+                        stream: IncidentsApi.data,
+                        builder: (context, AsyncSnapshot<List> snapshot) {
+                          int length = snapshot.data!.length;
+                          String congestion = '';
+                          Color? color;
+
+                          if (length < 5) {
+                            congestion = 'Low';
+                            color = Vx.hexToColor('#1e8a30');
+                          } else if (length > 5 && length <= 10) {
+                            congestion = 'Medium';
+                            color = Vx.hexToColor('#915f0d');
+                          } else {
+                            congestion = 'High';
+                            color = Vx.hexToColor('#f01d60');
+                          }
+
+                          return VStack([
+                            HStack([
+                              'Congestion'
+                                  .text
+                                  .size(context.screenWidth * .043)
+                                  .hexColor(Vx.whiteHex)
+                                  .makeCentered()
+                                  .pSymmetric(h: 15.0, v: 12.0),
+                              const Spacer(),
+                              congestion.text.italic
+                                  .size(context.screenWidth * .043)
+                                  .color(color)
+                                  .makeCentered()
+                                  .pSymmetric(h: 15.0, v: 12.0),
+                            ]).py(3.0),
+                            StreamBuilder<LatLng>(
+                                stream: IncidentsApi.position,
+                                builder: (context, snapshot) {
+                                  return VStack([
+                                    HStack([
+                                      'Latitude'
+                                          .text
+                                          .size(context.screenWidth * .02)
+                                          .hexColor(Vx.whiteHex)
+                                          .makeCentered()
+                                          .pSymmetric(h: 15.0, v: 12.0),
+                                      const Spacer(),
+                                      roundDouble(snapshot.data!.longitude, 4)
+                                          .text
+                                          .light
+                                          .italic
+                                          .size(context.screenWidth * .02)
+                                          .hexColor(Vx.whiteHex)
+                                          .makeCentered()
+                                          .pSymmetric(h: 15.0, v: 12.0),
+                                    ]).py(2.0),
+                                    HStack([
+                                      'Longitude'
+                                          .text
+                                          .size(context.screenWidth * .02)
+                                          .hexColor(Vx.whiteHex)
+                                          .makeCentered()
+                                          .pSymmetric(h: 15.0, v: 12.0),
+                                      const Spacer(),
+                                      roundDouble(snapshot.data!.latitude, 4)
+                                          .text
+                                          .light
+                                          .italic
+                                          .size(context.screenWidth * .02)
+                                          .hexColor(Vx.whiteHex)
+                                          .makeCentered()
+                                          .pSymmetric(h: 15.0, v: 12.0),
+                                    ]),
+                                  ]);
+                                }),
+                          ]);
+                        }))
+                .rounded
+                .hexColor('#204f5a')
+                .shadowMax
+                .border(color: Vx.hexToColor(Vx.grayHex300), width: .4)
+                .size(context.screenWidth * .6, context.screenHeight * .18)
+                .make()
+                .pSymmetric(h: 20.0, v: 25.0),
+          )
         ]),
       ),
     );
